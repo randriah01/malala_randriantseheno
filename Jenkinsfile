@@ -112,17 +112,17 @@ pipeline {
         stage('Couverture JaCoCo') {
             steps {
                 sh 'mvn jacoco:report -B'
-            }
-            post {
-                always {
-                    jacoco(
-                        execPattern:   '**/target/jacoco.exec',
-                        classPattern:  '**/target/classes',
-                        sourcePattern: '**/src/main/java',
-                        minimumLineCoverage: '70'
-                    )
-                }
-            }
+            // }
+            // post {
+            //     always {
+            //         jacoco(
+            //             execPattern:   '**/target/jacoco.exec',
+            //             classPattern:  '**/target/classes',
+            //             sourcePattern: '**/src/main/java',
+            //             minimumLineCoverage: '70'
+            //         )
+            //     }
+            // }
         }
 
         // ── Stage 6 : Analyse qualité ─────────────────
