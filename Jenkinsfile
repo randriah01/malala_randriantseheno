@@ -1,8 +1,9 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.9-eclipse-temurin-17'
-        }
+    agent any
+
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
     }
 
     stages {
@@ -20,6 +21,12 @@ pipeline {
             }
         }
 
+        stage('Tests') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
     }
 
     post {
@@ -33,7 +40,7 @@ Build   : #${env.BUILD_NUMBER}
 Branche : ${env.GIT_BRANCH}
 URL     : ${env.BUILD_URL}
 
-Consulter les logs : ${env.BUILD_URL}console
+Logs : ${env.BUILD_URL}console
 """,
                 to: 'equipe-dev@monentreprise.fr',
                 attachLog: true
