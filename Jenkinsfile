@@ -112,7 +112,7 @@ pipeline {
         stage('Couverture JaCoCo') {
             steps {
                 sh 'mvn jacoco:report -B'
-            // }
+             }
             // post {
             //     always {
             //         jacoco(
