@@ -1,121 +1,106 @@
-parameters {
-    string(
-        name: 'GIT_COMMIT_SHA',
-        defaultValue: 'main',
-        description: 'Branche ou SHA'
-    )
-
-    choice(
-        name: 'ENVIRONMENT',
-        choices: ['dev', 'staging', 'prod'],
-        description: 'Environnement'
-    )
-
-    booleanParam(
-        name: 'SKIP_TESTS',
-        defaultValue: false,
-        description: 'Skip tests'
-    )
-}
 pipeline {
-    agent any
 
-    tools {
-        maven 'Maven3'
-        jdk 'JDK17'
+    agent {
+        docker {
+            image 'maven:3.9.9-eclipse-temurin-17'
+            args '-u root'
+        }
+    }
+
+    parameters {
+        string(name: 'GIT_COMMIT_SHA', defaultValue: 'main')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'])
+        booleanParam(name: 'SKIP_TESTS', defaultValue: false)
     }
 
     stages {
 
+        // ✅ CHECKOUT
         stage('Checkout') {
             steps {
-                checkout scm
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "${params.GIT_COMMIT_SHA}"]],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/randriah01/malala_randriantseheno.git',
+                        credentialsId: 'github-credentials'
+                    ]]
+                ])
+                sh 'git log -1 --oneline'
             }
         }
 
-        stage('Build') {
-            steps {
-                echo "Build : #${env.BUILD_NUMBER}"
-                sh 'mvn clean install'
-            }
-        }
+        // ✅ PARALLEL
+        stage('Validation parallèle') {
+            parallel {
 
-        stage('Tests') {
-            steps {
-                sh 'mvn test'
-            }
-        }
+                stage('Tests unitaires') {
+                    when { expression { !params.SKIP_TESTS } }
+                    steps {
+                        sh 'mvn test -B'
+                    }
+                }
 
-    }
+                stage('Qualité') {
+                    steps {
+                        sh 'mvn checkstyle:checkstyle pmd:pmd -B'
+                    }
+                }
 
-    post {
-
-        success {
-            emailext(
-                subject: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-Projet  : ${env.JOB_NAME}
-Build   : #${env.BUILD_NUMBER}
-Branche : ${env.GIT_BRANCH}
-URL     : ${env.BUILD_URL}
-
-Logs : ${env.BUILD_URL}console
-""",
-                to: 'equipe-dev@monentreprise.fr',
-                attachLog: true
-            )
-        }
-
-        failure {
-            emailext(
-                subject: "❌ FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-Le build a échoué.
-
-Projet  : ${env.JOB_NAME}
-Build   : #${env.BUILD_NUMBER}
-URL     : ${env.BUILD_URL}
-
-Logs : ${env.BUILD_URL}console
-""",
-                to: 'equipe-dev@monentreprise.fr',
-                attachLog: true
-            )
-        }
-
-        fixed {
-            emailext(
-                subject: "🔧 FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le build est redevenu stable : ${env.BUILD_URL}",
-                to: 'equipe-dev@monentreprise.fr'
-            )
-        }
-    }
-}
-stage('Validation parallèle') {
-    parallel {
-
-        stage('Tests unitaires') {
-            steps {
-                sh 'mvn test -B'
-            }
-            post {
-                always {
-                    junit '**/surefire-reports/*.xml'
+                stage('Couverture') {
+                    steps {
+                        sh 'mvn test jacoco:report -B'
+                    }
                 }
             }
         }
 
-        stage('Analyse qualité') {
-            steps {
-                sh 'mvn checkstyle:checkstyle pmd:pmd -B'
+        // ✅ MATRIX
+        stage('Tests multi-Java') {
+            matrix {
+                axes {
+                    axis {
+                        name 'JAVA_VERSION'
+                        values '17', '21'
+                    }
+                }
+
+                stages {
+                    stage('Test') {
+                        steps {
+                            sh 'mvn clean test -B'
+                        }
+                    }
+                }
             }
         }
 
-        stage('Couverture') {
-            steps {
-                sh 'mvn test jacoco:report -B'
+        // ✅ VALIDATION PROD
+        stage('Validation avant PROD') {
+            when {
+                expression { params.ENVIRONMENT == 'prod' }
             }
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    input message: 'Déployer en PROD ?'
+                }
+            }
+        }
+
+        // ✅ DEPLOY
+        stage('Deploy') {
+            steps {
+                sh "echo Deploy vers ${params.ENVIRONMENT}"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS"
+        }
+        failure {
+            echo "FAILURE"
         }
     }
 }
