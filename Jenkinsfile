@@ -1,3 +1,22 @@
+parameters {
+    string(
+        name: 'GIT_COMMIT_SHA',
+        defaultValue: 'main',
+        description: 'Branche ou SHA'
+    )
+
+    choice(
+        name: 'ENVIRONMENT',
+        choices: ['dev', 'staging', 'prod'],
+        description: 'Environnement'
+    )
+
+    booleanParam(
+        name: 'SKIP_TESTS',
+        defaultValue: false,
+        description: 'Skip tests'
+    )
+}
 pipeline {
     agent any
 
@@ -72,7 +91,8 @@ Logs : ${env.BUILD_URL}console
             )
         }
     }
-    stage('Validation parallèle') {
+}
+stage('Validation parallèle') {
     parallel {
 
         stage('Tests unitaires') {
