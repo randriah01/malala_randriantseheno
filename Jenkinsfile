@@ -1,21 +1,28 @@
 pipeline {
-
-    agent {
-        docker {
-            image 'maven:3.9.9-eclipse-temurin-17'
-            args '-u root'
-        }
-    }
+    agent any
 
     parameters {
-        string(name: 'GIT_COMMIT_SHA', defaultValue: 'main')
-        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'])
-        booleanParam(name: 'SKIP_TESTS', defaultValue: false)
+        string(
+            name: 'GIT_COMMIT_SHA',
+            defaultValue: 'main',
+            description: 'Branche ou SHA du commit à builder'
+        )
+
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'prod'],
+            description: 'Environnement cible'
+        )
+
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Ignorer les tests'
+        )
     }
 
     stages {
 
-        // ✅ CHECKOUT
         stage('Checkout') {
             steps {
                 checkout([
@@ -26,22 +33,32 @@ pipeline {
                         credentialsId: 'github-credentials'
                     ]]
                 ])
+
                 sh 'git log -1 --oneline'
             }
         }
 
-        // ✅ PARALLEL
-        stage('Validation parallèle') {
+        stage('Build + Tests parallèles') {
             parallel {
 
                 stage('Tests unitaires') {
-                    when { expression { !params.SKIP_TESTS } }
                     steps {
-                        sh 'mvn test -B'
+                        script {
+                            if (!params.SKIP_TESTS) {
+                                sh 'mvn test -B'
+                            } else {
+                                echo "Tests ignorés"
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            junit '**/surefire-reports/*.xml'
+                        }
                     }
                 }
 
-                stage('Qualité') {
+                stage('Qualité code') {
                     steps {
                         sh 'mvn checkstyle:checkstyle pmd:pmd -B'
                     }
@@ -55,8 +72,7 @@ pipeline {
             }
         }
 
-        // ✅ MATRIX
-        stage('Tests multi-Java') {
+        stage('Matrix Java') {
             matrix {
                 axes {
                     axis {
@@ -75,32 +91,40 @@ pipeline {
             }
         }
 
-        // ✅ VALIDATION PROD
         stage('Validation avant PROD') {
             when {
                 expression { params.ENVIRONMENT == 'prod' }
             }
+
             steps {
                 timeout(time: 1, unit: 'HOURS') {
-                    input message: 'Déployer en PROD ?'
+                    input message: 'Déployer en PRODUCTION ?', ok: 'Oui'
                 }
             }
         }
 
-        // ✅ DEPLOY
         stage('Deploy') {
             steps {
-                sh "echo Deploy vers ${params.ENVIRONMENT}"
+                script {
+                    if (params.ENVIRONMENT == 'dev') {
+                        sh 'echo "Deploy DEV"'
+                    } else if (params.ENVIRONMENT == 'staging') {
+                        sh 'echo "Deploy STAGING"'
+                    } else {
+                        sh 'echo "Deploy PROD"'
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo "SUCCESS"
+            echo "Build SUCCESS"
         }
+
         failure {
-            echo "FAILURE"
+            echo "Build FAILED"
         }
     }
 }
