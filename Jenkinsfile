@@ -72,4 +72,30 @@ Logs : ${env.BUILD_URL}console
             )
         }
     }
+    stage('Validation parallèle') {
+    parallel {
+
+        stage('Tests unitaires') {
+            steps {
+                sh 'mvn test -B'
+            }
+            post {
+                always {
+                    junit '**/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Analyse qualité') {
+            steps {
+                sh 'mvn checkstyle:checkstyle pmd:pmd -B'
+            }
+        }
+
+        stage('Couverture') {
+            steps {
+                sh 'mvn test jacoco:report -B'
+            }
+        }
+    }
 }
